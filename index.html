@@ -1,0 +1,1759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Penalty Shootout – Football Game</title>
+  <meta name="description" content="Play a realistic 2D football penalty shootout against a computer-controlled goalkeeper. Score goals, build streaks, and beat the goalkeeper AI!" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=Orbitron:wght@700;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================================================
+       DESIGN TOKENS & RESET
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green-dark:   #1a4a1a;
+      --green-mid:    #236b23;
+      --green-light:  #2d8b2d;
+      --pitch-line:   rgba(255,255,255,0.85);
+      --gold:         #f5c518;
+      --red:          #e63946;
+      --white:        #ffffff;
+      --bg-dark:      #0d1117;
+      --card-bg:      rgba(255,255,255,0.06);
+      --card-border:  rgba(255,255,255,0.12);
+      --text-primary: #f0f4f8;
+      --text-muted:   rgba(255,255,255,0.55);
+      --shadow-glow:  0 0 40px rgba(245,197,24,0.25);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      overflow-x: hidden;
+    }
+
+    /* ============================================================
+       LAYOUT SHELL
+    ============================================================ */
+    #app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      gap: 14px;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(35,107,35,0.18) 0%, transparent 60%),
+        var(--bg-dark);
+    }
+
+    /* ============================================================
+       HEADER / SCOREBOARD
+    ============================================================ */
+    #header {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #title-block h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.1rem, 3vw, 1.6rem);
+      font-weight: 900;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, var(--gold), #fff 60%, var(--gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    #title-block .subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    #scoreboard {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .score-pill {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 8px 18px;
+      text-align: center;
+      backdrop-filter: blur(8px);
+      min-width: 72px;
+    }
+    .score-pill .label {
+      font-size: 0.6rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .score-pill .value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--gold);
+      line-height: 1.1;
+    }
+    .score-pill.goals .value { color: #4ade80; }
+    .score-pill.saves .value { color: #f87171; }
+    .score-pill.streak .value { color: #facc15; }
+
+    /* ============================================================
+       DIFFICULTY SELECTOR
+    ============================================================ */
+    #diff-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #diff-row span {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .diff-btn {
+      padding: 5px 16px;
+      border: 1px solid var(--card-border);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+      letter-spacing: 0.5px;
+    }
+    .diff-btn:hover { border-color: var(--gold); color: var(--gold); }
+    .diff-btn.active {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #000;
+    }
+
+    /* ============================================================
+       GAME CANVAS WRAPPER
+    ============================================================ */
+    #canvas-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 900px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.08), 0 24px 80px rgba(0,0,0,0.6);
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      background: var(--green-dark);
+      cursor: crosshair;
+    }
+
+    /* Overlay messages */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .overlay-msg {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(2rem, 7vw, 3.8rem);
+      font-weight: 900;
+      text-align: center;
+      letter-spacing: 3px;
+      opacity: 0;
+      transform: scale(0.6);
+      transition: opacity .25s, transform .3s cubic-bezier(.17,.67,.35,1.4);
+      pointer-events: none;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.8);
+      line-height: 1.1;
+    }
+    .overlay-msg.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .overlay-msg.goal { color: #4ade80; }
+    .overlay-msg.save { color: #f87171; }
+    .overlay-msg.miss { color: #fbbf24; }
+    .overlay-msg.post { color: #a78bfa; }
+
+    #streak-banner {
+      margin-top: 10px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(0.9rem, 3vw, 1.3rem);
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--gold);
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity .3s .15s, transform .3s .15s;
+    }
+    #streak-banner.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Confetti canvas */
+    #confettiCanvas {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9;
+    }
+
+    /* ============================================================
+       CONTROLS PANEL
+    ============================================================ */
+    #controls {
+      width: 100%;
+      max-width: 900px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .ctrl-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      backdrop-filter: blur(8px);
+    }
+    .ctrl-card h3 {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    /* Direction grid */
+    #dir-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 5px;
+    }
+    .dir-cell {
+      aspect-ratio: 1;
+      border: 1.5px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      transition: all .15s;
+      user-select: none;
+    }
+    .dir-cell:hover { border-color: var(--gold); background: rgba(245,197,24,0.1); }
+    .dir-cell.active {
+      border-color: var(--gold);
+      background: rgba(245,197,24,0.22);
+      box-shadow: 0 0 12px rgba(245,197,24,0.3);
+    }
+
+    /* Power & Height */
+    .ctrl-group { margin-bottom: 10px; }
+    .ctrl-group:last-child { margin-bottom: 0; }
+    .ctrl-group label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+    .ctrl-group label span { color: var(--gold); font-weight: 600; }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 5px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 99px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--gold);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(245,197,24,0.5);
+      transition: transform .15s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+    /* Height buttons */
+    .height-btns {
+      display: flex;
+      gap: 6px;
+      margin-top: 2px;
+    }
+    .height-btn {
+      flex: 1;
+      padding: 7px 0;
+      border: 1.5px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .height-btn:hover { border-color: var(--gold); color: var(--gold); }
+    .height-btn.active {
+      border-color: var(--gold);
+      background: rgba(245,197,24,0.2);
+      color: var(--gold);
+    }
+
+    /* Curve zero color */
+    .curve-zero { color: #4ade80 !important; }
+
+    /* SHOOT BUTTON */
+    #shoot-btn {
+      width: 100%;
+      max-width: 900px;
+      padding: 16px;
+      border: none;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #f5c518, #e0a800);
+      color: #000;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 900;
+      letter-spacing: 3px;
+      cursor: pointer;
+      transition: all .2s;
+      box-shadow: 0 4px 24px rgba(245,197,24,0.35);
+      position: relative;
+      overflow: hidden;
+      animation: pulse-glow 2s infinite;
+    }
+    #shoot-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.3), transparent);
+      pointer-events: none;
+    }
+    #shoot-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(245,197,24,0.5); }
+    #shoot-btn:active { transform: translateY(0); }
+    #shoot-btn:disabled {
+      background: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.3);
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+      animation: none;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 4px 24px rgba(245,197,24,0.35); }
+      50%       { box-shadow: 0 4px 40px rgba(245,197,24,0.65); }
+    }
+
+    /* ============================================================
+       STATS ROW
+    ============================================================ */
+    #stats-row {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+    .stat-box {
+      flex: 1;
+      min-width: 90px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      text-align: center;
+    }
+    .stat-box .s-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+    .stat-box .s-val {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+    .stat-box.acc .s-val { color: #4ade80; }
+    .stat-box.top .s-val { color: var(--gold); }
+
+    /* ============================================================
+       RESET BUTTON
+    ============================================================ */
+    #reset-btn {
+      padding: 10px 28px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 999px;
+      background: transparent;
+      color: rgba(255,255,255,0.6);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+      letter-spacing: 0.5px;
+    }
+    #reset-btn:hover { border-color: var(--red); color: var(--red); }
+
+    /* ============================================================
+       GAME OVER SCREEN
+    ============================================================ */
+    #gameover-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(12px);
+    }
+    #gameover-screen.active { display: flex; }
+
+    #gameover-card {
+      background: linear-gradient(145deg, #1a2233, #0d1117);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 28px;
+      padding: 48px 48px 40px;
+      max-width: 480px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.8), var(--shadow-glow);
+      animation: slideUp .4s cubic-bezier(.17,.67,.35,1.3);
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(40px) scale(0.95); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    #gameover-card .trophy { font-size: 4rem; margin-bottom: 12px; }
+    #gameover-card h2 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--gold), #fff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    #gameover-card .go-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+    }
+
+    #go-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .go-stat {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .go-stat .go-val {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--gold);
+    }
+    .go-stat .go-lbl {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    #play-again-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #f5c518, #e0a800);
+      color: #000;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem;
+      font-weight: 900;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: all .2s;
+      box-shadow: 0 4px 20px rgba(245,197,24,0.3);
+    }
+    #play-again-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(245,197,24,0.5); }
+
+    /* ============================================================
+       RESPONSIVE
+    ============================================================ */
+    @media (max-width: 640px) {
+      #controls { grid-template-columns: 1fr 1fr; }
+      #controls .ctrl-card:last-child { grid-column: span 2; }
+    }
+    @media (max-width: 420px) {
+      #controls { grid-template-columns: 1fr; }
+      #controls .ctrl-card:last-child { grid-column: span 1; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== HEADER ===== -->
+  <header id="header">
+    <div id="title-block">
+      <h1>&#9917; PENALTY SHOOTOUT</h1>
+      <p class="subtitle">Beat the goalkeeper &middot; Score streaks &middot; Glory awaits</p>
+    </div>
+    <div id="scoreboard">
+      <div class="score-pill">
+        <div class="label">Shots</div>
+        <div class="value" id="sb-shots">0</div>
+      </div>
+      <div class="score-pill goals">
+        <div class="label">Goals</div>
+        <div class="value" id="sb-goals">0</div>
+      </div>
+      <div class="score-pill saves">
+        <div class="label">Saves</div>
+        <div class="value" id="sb-saves">0</div>
+      </div>
+      <div class="score-pill streak">
+        <div class="label">Streak</div>
+        <div class="value" id="sb-streak">0</div>
+      </div>
+      <div class="score-pill" style="background:rgba(245,197,24,0.08);border-color:rgba(245,197,24,0.25)">
+        <div class="label">Points</div>
+        <div class="value" id="sb-points" style="color:#facc15">0</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== DIFFICULTY ===== -->
+  <div id="diff-row">
+    <span>Difficulty:</span>
+    <button class="diff-btn active" data-diff="easy"   id="diff-easy">Easy</button>
+    <button class="diff-btn"        data-diff="medium" id="diff-medium">Medium</button>
+    <button class="diff-btn"        data-diff="hard"   id="diff-hard">Hard</button>
+    <span id="diff-info" style="font-size:0.7rem;color:var(--gold);margin-left:4px;"></span>
+  </div>
+
+  <!-- ===== CANVAS ===== -->
+  <div id="canvas-wrap">
+    <canvas id="gameCanvas"></canvas>
+    <canvas id="confettiCanvas"></canvas>
+    <div id="overlay">
+      <div id="overlay-msg" class="overlay-msg"></div>
+      <div id="streak-banner"></div>
+    </div>
+  </div>
+
+  <!-- ===== CONTROLS ===== -->
+  <div id="controls">
+    <!-- Direction Grid -->
+    <div class="ctrl-card">
+      <h3>&#127919; Shot Direction</h3>
+      <div id="dir-grid"></div>
+    </div>
+
+    <!-- Power & Height -->
+    <div class="ctrl-card">
+      <h3>&#128165; Power &amp; Height</h3>
+      <div class="ctrl-group">
+        <label>Power <span id="power-val">70%</span></label>
+        <input type="range" id="power-slider" min="20" max="100" value="70" />
+      </div>
+      <div class="ctrl-group">
+        <label>Height</label>
+        <div class="height-btns">
+          <button class="height-btn active" data-h="low">Low</button>
+          <button class="height-btn"        data-h="mid">Mid</button>
+          <button class="height-btn"        data-h="high">High</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Curve -->
+    <div class="ctrl-card">
+      <h3>&#127744; Curve / Spin</h3>
+      <div class="ctrl-group">
+        <label>Curve <span id="curve-val" class="curve-zero">0</span></label>
+        <input type="range" id="curve-slider" min="-5" max="5" value="0" step="1" />
+      </div>
+      <div style="margin-top:12px;font-size:0.68rem;color:var(--text-muted);line-height:1.6">
+        Negative = left curve<br>Positive = right curve<br>0 = straight shot
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SHOOT BUTTON ===== -->
+  <button id="shoot-btn">&#9889; SHOOT</button>
+
+  <!-- ===== STATS ===== -->
+  <div id="stats-row">
+    <div class="stat-box acc">
+      <div class="s-label">Accuracy</div>
+      <div class="s-val" id="st-acc">--</div>
+    </div>
+    <div class="stat-box">
+      <div class="s-label">Misses</div>
+      <div class="s-val" id="st-miss" style="color:#f87171">0</div>
+    </div>
+    <div class="stat-box top">
+      <div class="s-label">Top-Corner Goals</div>
+      <div class="s-val" id="st-top">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="s-label">Post / Bar Hits</div>
+      <div class="s-val" id="st-post" style="color:#a78bfa">0</div>
+    </div>
+    <div class="stat-box top">
+      <div class="s-label">Best Streak</div>
+      <div class="s-val" id="st-best">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="s-label">Bonus Points</div>
+      <div class="s-val" id="st-bonus" style="color:var(--gold)">0</div>
+    </div>
+  </div>
+
+  <!-- ===== RESET ===== -->
+  <button id="reset-btn">&#128260; Reset Game</button>
+
+</div><!-- /#app -->
+
+<!-- ===== GAME OVER SCREEN ===== -->
+<div id="gameover-screen">
+  <div id="gameover-card">
+    <div class="trophy" id="go-trophy">&#127942;</div>
+    <h2 id="go-title">Full Time!</h2>
+    <p class="go-sub" id="go-sub">Here's how you did this session.</p>
+    <div id="go-stats">
+      <div class="go-stat">
+        <div class="go-val" id="go-goals">0</div>
+        <div class="go-lbl">Goals</div>
+      </div>
+      <div class="go-stat">
+        <div class="go-val" id="go-shots">0</div>
+        <div class="go-lbl">Shots</div>
+      </div>
+      <div class="go-stat">
+        <div class="go-val" id="go-points">0</div>
+        <div class="go-lbl">Points</div>
+      </div>
+      <div class="go-stat">
+        <div class="go-val" id="go-streak">0</div>
+        <div class="go-lbl">Best Streak</div>
+      </div>
+    </div>
+    <button id="play-again-btn">&#9654; PLAY AGAIN</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     GAME JAVASCRIPT
+================================================================ -->
+<script>
+(function() {
+  'use strict';
+
+  /* ================================================================
+     CANVAS SETUP
+  ================================================================ */
+  const canvas     = document.getElementById('gameCanvas');
+  const ctx        = canvas.getContext('2d');
+  const confCanvas = document.getElementById('confettiCanvas');
+  const confCtx    = confCanvas.getContext('2d');
+
+  // Logical resolution (canvas internal px)
+  const W = 900, H = 560;
+  canvas.width     = W; canvas.height     = H;
+  confCanvas.width = W; confCanvas.height = H;
+
+  /* ================================================================
+     DIFFICULTY CONFIG
+  ================================================================ */
+  const DIFFICULTY = {
+    easy:   { saveChance: 0.28, reactionMs: 420, prediction: 0.30 },
+    medium: { saveChance: 0.44, reactionMs: 280, prediction: 0.58 },
+    hard:   { saveChance: 0.62, reactionMs: 160, prediction: 0.80 },
+  };
+
+  /* ================================================================
+     GAME STATE
+  ================================================================ */
+  function createState() {
+    return {
+      shots:       0,
+      goals:       0,
+      saves:       0,
+      misses:      0,
+      postHits:    0,
+      topCorner:   0,
+      streak:      0,
+      bestStreak:  0,
+      points:      0,
+      bonusPoints: 0,
+      difficulty:  'easy',
+      animating:   false,
+      maxShots:    10,
+      gameOver:    false,
+    };
+  }
+
+  let state = createState();
+
+  /* ================================================================
+     FIELD GEOMETRY
+  ================================================================ */
+  const FIELD = {
+    goalW:     280,
+    goalH:     120,
+    postThick:  8,
+    get goalX() { return (W - this.goalW) / 2; },
+    goalY:      60,
+    spotX:      W / 2,
+    spotY:      H - 90,
+    gkRestX:    W / 2,
+    gkRestY:    118,
+  };
+
+  /* ================================================================
+     GOALKEEPER STATE
+  ================================================================ */
+  let gk = resetGkState();
+  function resetGkState() {
+    return {
+      x:            FIELD.gkRestX,
+      y:            FIELD.gkRestY,
+      width:        52,
+      height:       82,
+      diving:       false,
+      diveProgress: 0,
+      diveX:        FIELD.gkRestX,
+      diveY:        FIELD.gkRestY,
+      saved:        false,
+    };
+  }
+
+  /* ================================================================
+     BALL STATE
+  ================================================================ */
+  let ball = resetBallState();
+  function resetBallState() {
+    return {
+      x:         FIELD.spotX,
+      y:         FIELD.spotY,
+      r:         12,
+      t:         0,
+      startX:    FIELD.spotX,
+      startY:    FIELD.spotY,
+      endX:      FIELD.spotX,
+      endY:      FIELD.spotY,
+      curveAmt:  0,
+      heightType:'low',
+      animating: false,
+      done:      false,
+      scale:     1,
+      opacity:   1,
+      rotation:  0,
+    };
+  }
+
+  /* ================================================================
+     CROWD PARTICLES
+  ================================================================ */
+  const crowdParticles = [];
+  (function initCrowd() {
+    for (let i = 0; i < 220; i++) {
+      crowdParticles.push({
+        x: Math.random() * W,
+        y: 18 + Math.random() * 34,
+        r: 2 + Math.random() * 2.5,
+        color: 'hsl(' + Math.floor(Math.random()*360) + ',70%,65%)',
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.3 + Math.random() * 0.5,
+      });
+    }
+  })();
+
+  /* ================================================================
+     CONFETTI
+  ================================================================ */
+  const confettiList = [];
+
+  function spawnConfetti() {
+    for (let i = 0; i < 130; i++) {
+      confettiList.push({
+        x:      Math.random() * W,
+        y:      -10,
+        vx:     (Math.random() - 0.5) * 6,
+        vy:     2 + Math.random() * 4,
+        r:      4 + Math.random() * 5,
+        color:  'hsl(' + Math.floor(Math.random()*360) + ',90%,65%)',
+        rot:    Math.random() * Math.PI * 2,
+        rspeed: (Math.random() - 0.5) * 0.2,
+        life:   1,
+      });
+    }
+  }
+
+  function updateConfetti() {
+    confCtx.clearRect(0, 0, W, H);
+    for (let i = confettiList.length - 1; i >= 0; i--) {
+      const c = confettiList[i];
+      c.x  += c.vx;
+      c.y  += c.vy;
+      c.vy += 0.12;
+      c.rot += c.rspeed;
+      c.life -= 0.008;
+      if (c.life <= 0 || c.y > H + 20) { confettiList.splice(i, 1); continue; }
+      confCtx.save();
+      confCtx.globalAlpha = c.life;
+      confCtx.translate(c.x, c.y);
+      confCtx.rotate(c.rot);
+      confCtx.fillStyle = c.color;
+      confCtx.fillRect(-c.r / 2, -c.r / 2, c.r, c.r * 0.6);
+      confCtx.restore();
+    }
+  }
+
+  /* ================================================================
+     SHOT OUTCOME STATE
+  ================================================================ */
+  let shotOutcome  = null;
+  let overlayTimer = null;
+
+  /* ================================================================
+     DIRECTION GRID
+  ================================================================ */
+  const DIR_ICONS = ['&#8598;','&#8593;','&#8599;','&#8592;','&#9917;','&#8594;','&#8601;','&#8595;','&#8600;'];
+
+  // col: 0=left,1=center,2=right  row: 0=top,1=mid,2=low
+  const DIR_MAP = [
+    { col: 0, row: 0 }, { col: 1, row: 0 }, { col: 2, row: 0 },
+    { col: 0, row: 1 }, { col: 1, row: 1 }, { col: 2, row: 1 },
+    { col: 0, row: 2 }, { col: 1, row: 2 }, { col: 2, row: 2 },
+  ];
+
+  let selectedDir = 4;  // center default
+
+  const dirGrid = document.getElementById('dir-grid');
+  DIR_ICONS.forEach(function(icon, i) {
+    const cell = document.createElement('div');
+    cell.className = 'dir-cell' + (i === selectedDir ? ' active' : '');
+    cell.dataset.index = i;
+    cell.innerHTML = icon;
+    cell.addEventListener('click', function() {
+      selectedDir = i;
+      document.querySelectorAll('.dir-cell').forEach(function(c) { c.classList.remove('active'); });
+      cell.classList.add('active');
+    });
+    dirGrid.appendChild(cell);
+  });
+
+  /* ================================================================
+     UI BINDINGS
+  ================================================================ */
+  const powerSlider  = document.getElementById('power-slider');
+  const powerVal     = document.getElementById('power-val');
+  const curveSlider  = document.getElementById('curve-slider');
+  const curveVal     = document.getElementById('curve-val');
+  const shootBtn     = document.getElementById('shoot-btn');
+  const resetBtn     = document.getElementById('reset-btn');
+  const overlayMsg   = document.getElementById('overlay-msg');
+  const streakBanner = document.getElementById('streak-banner');
+
+  powerSlider.addEventListener('input', function() {
+    powerVal.textContent = powerSlider.value + '%';
+  });
+
+  curveSlider.addEventListener('input', function() {
+    const v = parseInt(curveSlider.value);
+    curveVal.textContent = v === 0 ? '0' : (v > 0 ? '+' + v : '' + v);
+    curveVal.className = v === 0 ? 'curve-zero' : '';
+  });
+
+  let selectedHeight = 'low';
+  document.querySelectorAll('.height-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      selectedHeight = btn.dataset.h;
+      document.querySelectorAll('.height-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.diff-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (state.animating) return;
+      state.difficulty = btn.dataset.diff;
+      document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      updateDiffInfo();
+    });
+  });
+
+  function updateDiffInfo() {
+    const d   = DIFFICULTY[state.difficulty];
+    const pct = Math.round(d.saveChance * 100);
+    document.getElementById('diff-info').textContent = 'GK saves ~' + pct + '% of shots';
+  }
+  updateDiffInfo();
+
+  shootBtn.addEventListener('click', takeShot);
+  resetBtn.addEventListener('click', resetGame);
+  document.getElementById('play-again-btn').addEventListener('click', function() {
+    document.getElementById('gameover-screen').classList.remove('active');
+    resetGame();
+  });
+
+  /* ================================================================
+     SHOOTING LOGIC
+  ================================================================ */
+  function takeShot() {
+    if (state.animating || state.gameOver) return;
+
+    const power  = parseInt(powerSlider.value) / 100;
+    const curve  = parseInt(curveSlider.value);
+    const height = selectedHeight;
+    const dir    = DIR_MAP[selectedDir];
+
+    state.shots++;
+    state.animating = true;
+    shootBtn.disabled = true;
+
+    // ---- Compute goal target position ----
+    const gX = FIELD.goalX, gY = FIELD.goalY;
+    const gW = FIELD.goalW, gH = FIELD.goalH;
+
+    // X inside goal based on column
+    let targetGoalX;
+    if (dir.col === 0)      targetGoalX = gX + 32;
+    else if (dir.col === 2) targetGoalX = gX + gW - 32;
+    else                    targetGoalX = gX + gW / 2;
+
+    // Y inside goal based on row
+    let targetGoalY;
+    if (dir.row === 0)      targetGoalY = gY + 24;
+    else if (dir.row === 1) targetGoalY = gY + gH * 0.55;
+    else                    targetGoalY = gY + gH - 16;
+
+    // Height override
+    if (height === 'high') targetGoalY = Math.min(targetGoalY, gY + 28);
+    if (height === 'low')  targetGoalY = Math.max(targetGoalY, gY + gH - 20);
+
+    // ---- Determine outcome ----
+    let missChance = 0.06;
+    if (power < 0.35) missChance += 0.10;
+    if (dir.row === 2 && dir.col !== 1) missChance += 0.07;
+    if (height === 'high' && dir.row === 0) missChance += 0.05;
+
+    const roll = Math.random();
+    let outcome;
+
+    if (roll < missChance) {
+      outcome = 'miss';
+    } else {
+      outcome = computeGkOutcome(dir, power, curve, height);
+    }
+
+    shotOutcome = outcome;
+
+    // ---- Compute final ball position ----
+    let finalX = targetGoalX + curve * 5;
+    let finalY = targetGoalY;
+
+    if (outcome === 'miss') {
+      const side = Math.random() > 0.5 ? 1 : -1;
+      finalX = gX + (side > 0 ? gW + 70 : -70);
+      finalY = gY + Math.random() * (gH + 30);
+    } else if (outcome === 'post') {
+      const which = Math.random();
+      if (which < 0.33)       { finalX = gX; }
+      else if (which < 0.66)  { finalX = gX + gW; }
+      else                    { finalY = gY; finalX = targetGoalX; }
+    }
+
+    // ---- Setup GK dive ----
+    setupGkDive(dir, outcome);
+
+    // ---- Setup ball ----
+    ball = resetBallState();
+    ball.startX    = FIELD.spotX;
+    ball.startY    = FIELD.spotY;
+    ball.endX      = finalX;
+    ball.endY      = finalY;
+    ball.curveAmt  = curve * 14;
+    ball.heightType= height;
+    ball.animating = true;
+
+    // ---- Start animation ----
+    startShotAnimation();
+  }
+
+  /* ----------------------------------------------------------------
+     GK AI
+  ---------------------------------------------------------------- */
+  function computeGkOutcome(dir, power, curve, height) {
+    const diff        = DIFFICULTY[state.difficulty];
+    const streakBonus = Math.min(state.streak * 0.03, 0.20);
+    const effSave     = Math.min(diff.saveChance + streakBonus, 0.78);
+    const effPred     = Math.min(diff.prediction + streakBonus * 0.5, 0.90);
+
+    const correctGuess  = Math.random() < effPred;
+    const powerPenalty  = (power - 0.5) * 0.25;
+    const heightMod     = height === 'high' ? -0.05 : height === 'low' ? 0.04 : 0;
+    const curveMod      = Math.abs(parseInt(curveSlider.value)) > 2 ? -0.08 : 0;
+    const isTopCorner   = dir.row === 0 && (dir.col === 0 || dir.col === 2);
+    const topMod        = isTopCorner ? -0.14 : 0;
+
+    let saveP = effSave - powerPenalty + heightMod + curveMod + topMod;
+    if (!correctGuess) saveP *= 0.35;
+    saveP = Math.max(0.04, Math.min(0.90, saveP));
+
+    const postP = 0.05;
+    const roll  = Math.random();
+    if (roll < postP)          return 'post';
+    if (roll < postP + saveP)  return 'save';
+    return 'goal';
+  }
+
+  /* ----------------------------------------------------------------
+     GK Dive
+  ---------------------------------------------------------------- */
+  function setupGkDive(dir, outcome) {
+    gk = resetGkState();
+
+    const gX = FIELD.goalX, gW = FIELD.goalW;
+    let diveX, diveY;
+
+    if (outcome === 'save') {
+      diveX = gX + (dir.col / 2) * gW;
+      diveY = FIELD.gkRestY + (dir.row === 0 ? -38 : dir.row === 2 ? 28 : 0);
+      gk.saved = true;
+    } else {
+      const wrongSide = Math.random() > 0.5;
+      const diveCol   = wrongSide ? 2 - dir.col : dir.col;
+      diveX = gX + (diveCol / 2) * gW;
+      diveY = FIELD.gkRestY + (Math.random() - 0.5) * 40;
+    }
+
+    gk.diveX = diveX;
+    gk.diveY = diveY;
+
+    const diff = DIFFICULTY[state.difficulty];
+    setTimeout(function() { gk.diving = true; }, diff.reactionMs);
+  }
+
+  /* ================================================================
+     ANIMATION
+  ================================================================ */
+  let lastTime = null;
+  let animId   = null;
+
+  function startShotAnimation() {
+    lastTime = null;
+    if (animId) cancelAnimationFrame(animId);
+    animId = requestAnimationFrame(shotFrame);
+  }
+
+  function shotFrame(ts) {
+    if (!lastTime) lastTime = ts;
+    const dt = Math.min((ts - lastTime) / 1000, 0.05);
+    lastTime = ts;
+
+    // Update ball
+    if (ball.animating && !ball.done) {
+      ball.t += dt * 1.55;
+      if (ball.t >= 1) { ball.t = 1; ball.done = true; }
+
+      const et  = easeInOut(ball.t);
+      const midX = (ball.startX + ball.endX) / 2 + ball.curveAmt;
+      const arcH  = ball.heightType === 'high' ? 1.4 : ball.heightType === 'mid' ? 0.9 : 0.5;
+      const midY  = ball.startY - 180 * arcH;
+
+      ball.x        = bezier(ball.startX, midX, ball.endX, et);
+      ball.y        = bezier(ball.startY, midY, ball.endY, et);
+      ball.scale    = 1 - 0.42 * et;
+      ball.rotation += dt * 16;
+    }
+
+    // Update GK
+    if (gk.diving) {
+      gk.diveProgress = Math.min(gk.diveProgress + dt * 2.4, 1);
+      gk.x = lerp(FIELD.gkRestX, gk.diveX, easeOut(gk.diveProgress));
+      gk.y = lerp(FIELD.gkRestY, gk.diveY, easeOut(gk.diveProgress));
+    }
+
+    drawScene();
+    updateConfetti();
+
+    if (!ball.done) {
+      animId = requestAnimationFrame(shotFrame);
+    } else {
+      resolveShotOutcome(shotOutcome);
+    }
+  }
+
+  function resolveShotOutcome(outcome) {
+    updateStats(outcome);
+    showOverlay(outcome);
+    updateScoreboard();
+    updateStatsUI();
+
+    const delay = outcome === 'goal' ? 2400 : 1800;
+    setTimeout(function() {
+      ball = resetBallState();
+      gk   = resetGkState();
+      state.animating = false;
+      if (!state.gameOver) {
+        shootBtn.disabled = false;
+        overlayMsg.classList.remove('show');
+        streakBanner.classList.remove('show');
+      }
+      drawScene();
+    }, delay);
+  }
+
+  /* ================================================================
+     STATS & SCORING
+  ================================================================ */
+  function updateStats(outcome) {
+    if (outcome === 'goal') {
+      state.goals++;
+      state.streak++;
+      if (state.streak > state.bestStreak) state.bestStreak = state.streak;
+
+      let pts = 100;
+      const power = parseInt(powerSlider.value);
+      if (power >= 85) pts += 20;
+      if (state.streak >= 3) pts += state.streak * 15;
+
+      const dir      = DIR_MAP[selectedDir];
+      const isTopCor = dir.row === 0 && (dir.col === 0 || dir.col === 2);
+      if (isTopCor) { pts += 50; state.topCorner++; }
+
+      state.bonusPoints += pts - 100;
+      state.points      += pts;
+
+    } else if (outcome === 'save') {
+      state.saves++;
+      state.streak = 0;
+    } else if (outcome === 'miss') {
+      state.misses++;
+      state.streak = 0;
+    } else if (outcome === 'post') {
+      state.postHits++;
+      state.streak = 0;
+    }
+
+    if (state.shots >= state.maxShots) {
+      state.gameOver = true;
+      setTimeout(showGameOver, 2800);
+    }
+  }
+
+  /* ================================================================
+     OVERLAY
+  ================================================================ */
+  function showOverlay(outcome) {
+    if (overlayTimer) clearTimeout(overlayTimer);
+
+    const msgs = {
+      goal: ['GOAL!', 'BRILLIANT!', 'UNSTOPPABLE!', 'TOP BINS!'],
+      save: ['SAVED!', 'KEEPER!', 'DENIED!'],
+      miss: ['MISSED!', 'WIDE!', 'OFF TARGET!'],
+      post: ['POST!', 'CROSSBAR!', 'OFF THE FRAME!'],
+    };
+    const emojis = { goal: '&#9917; ', save: '&#129344; ', miss: '&#128168; ', post: '&#127959; ' };
+
+    const list = msgs[outcome] || ['--'];
+    const text = list[Math.floor(Math.random() * list.length)];
+
+    overlayMsg.innerHTML  = (emojis[outcome] || '') + text;
+    overlayMsg.className  = 'overlay-msg ' + outcome;
+    void overlayMsg.offsetWidth;
+    overlayMsg.classList.add('show');
+
+    if (outcome === 'goal' && state.streak >= 2) {
+      streakBanner.textContent = '&#128293; ' + state.streak + 'x STREAK! +' + (state.streak * 15) + ' BONUS';
+      streakBanner.classList.add('show');
+      spawnConfetti();
+    }
+
+    const dur = outcome === 'goal' ? 2200 : 1600;
+    overlayTimer = setTimeout(function() {
+      overlayMsg.classList.remove('show');
+      streakBanner.classList.remove('show');
+    }, dur);
+  }
+
+  /* ================================================================
+     SCOREBOARD UI
+  ================================================================ */
+  function updateScoreboard() {
+    document.getElementById('sb-shots').textContent  = state.shots;
+    document.getElementById('sb-goals').textContent  = state.goals;
+    document.getElementById('sb-saves').textContent  = state.saves;
+    document.getElementById('sb-streak').textContent = state.streak;
+    document.getElementById('sb-points').textContent = state.points;
+  }
+
+  function updateStatsUI() {
+    const acc = state.shots > 0 ? Math.round((state.goals / state.shots) * 100) + '%' : '--';
+    document.getElementById('st-acc').textContent  = acc;
+    document.getElementById('st-miss').textContent = state.misses;
+    document.getElementById('st-top').textContent  = state.topCorner;
+    document.getElementById('st-post').textContent = state.postHits;
+    document.getElementById('st-best').textContent = state.bestStreak;
+    document.getElementById('st-bonus').textContent= state.bonusPoints;
+  }
+
+  /* ================================================================
+     GAME OVER
+  ================================================================ */
+  function showGameOver() {
+    document.getElementById('go-goals').textContent  = state.goals;
+    document.getElementById('go-shots').textContent  = state.shots;
+    document.getElementById('go-points').textContent = state.points;
+    document.getElementById('go-streak').textContent = state.bestStreak;
+
+    const ratio = state.shots > 0 ? state.goals / state.shots : 0;
+    let trophy = '&#128534;', title = 'Better Luck Next Time!';
+    if (ratio >= 0.8)       { trophy = '&#129351;'; title = 'Legendary Shooter!'; }
+    else if (ratio >= 0.6)  { trophy = '&#127942;'; title = 'Excellent Performance!'; }
+    else if (ratio >= 0.4)  { trophy = '&#129352;'; title = 'Decent Effort!'; }
+
+    document.getElementById('go-trophy').innerHTML = trophy;
+    document.getElementById('go-title').textContent = title;
+    document.getElementById('go-sub').textContent   =
+      state.goals + ' goals from ' + state.shots + ' shots \u2013 Accuracy: ' + Math.round(ratio * 100) + '%';
+
+    document.getElementById('gameover-screen').classList.add('active');
+    if (state.goals >= 6) spawnConfetti();
+  }
+
+  /* ================================================================
+     RESET
+  ================================================================ */
+  function resetGame() {
+    const diff = state.difficulty;
+    state = createState();
+    state.difficulty = diff;
+    ball = resetBallState();
+    gk   = resetGkState();
+    confettiList.length = 0;
+    confCtx.clearRect(0, 0, W, H);
+    overlayMsg.classList.remove('show');
+    streakBanner.classList.remove('show');
+    shootBtn.disabled = false;
+    updateScoreboard();
+    updateStatsUI();
+    drawScene();
+  }
+
+  /* ================================================================
+     DRAWING ENGINE
+  ================================================================ */
+  function drawScene() {
+    ctx.clearRect(0, 0, W, H);
+    drawStands();
+    drawCrowd();
+    drawPitch();
+    drawPenaltyArea();
+    drawGoal();
+    drawNet();
+    drawPenaltySpot();
+    drawGoalkeeper();
+    drawBall();
+    drawHUD();
+  }
+
+  /* ----------------------------------------------------------------
+     STANDS (top of canvas)
+  ---------------------------------------------------------------- */
+  function drawStands() {
+    // Sky
+    const sky = ctx.createLinearGradient(0, 0, 0, 60);
+    sky.addColorStop(0, '#0f172a');
+    sky.addColorStop(1, '#1e293b');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, 60);
+
+    // Stand rows (alternating colors = seating blocks)
+    const rows = [
+      { y: 0,  h: 11, c: '#1e3a5f' },
+      { y: 11, h: 11, c: '#7f1d1d' },
+      { y: 22, h: 11, c: '#1e3a5f' },
+      { y: 33, h: 11, c: '#7f1d1d' },
+      { y: 44, h: 14, c: '#1e3a5f' },
+    ];
+    rows.forEach(function(r) {
+      ctx.fillStyle = r.c;
+      ctx.fillRect(0, r.y, W, r.h);
+      // seat shine
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(0, r.y, W, 2);
+    });
+
+    // Floodlight poles
+    [[70, 0], [W - 70, 0]].forEach(function(pos) {
+      const lx = pos[0];
+      ctx.fillStyle = '#4b5563';
+      ctx.fillRect(lx - 4, 0, 8, 58);
+      // Light glow
+      const glow = ctx.createRadialGradient(lx, 4, 2, lx, 4, 55);
+      glow.addColorStop(0, 'rgba(255,255,200,0.20)');
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.fillRect(lx - 55, 0, 110, 58);
+      // Light bar
+      ctx.fillStyle = '#fef9c3';
+      ctx.fillRect(lx - 14, 0, 28, 5);
+    });
+  }
+
+  /* ----------------------------------------------------------------
+     PITCH
+  ---------------------------------------------------------------- */
+  function drawPitch() {
+    const grad = ctx.createLinearGradient(0, 55, 0, H);
+    grad.addColorStop(0, '#1e5e1e');
+    grad.addColorStop(0.45, '#236b23');
+    grad.addColorStop(1,   '#1a5a1a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 55, W, H - 55);
+
+    // Grass stripes (mowing pattern)
+    const stripes = 10;
+    const sw = W / stripes;
+    for (let s = 0; s < stripes; s++) {
+      ctx.fillStyle = s % 2 === 0 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.025)';
+      ctx.fillRect(s * sw, 55, sw, H - 55);
+    }
+  }
+
+  /* ----------------------------------------------------------------
+     CROWD DOTS
+  ---------------------------------------------------------------- */
+  function drawCrowd() {
+    const t = Date.now() / 1000;
+    crowdParticles.forEach(function(p) {
+      const wave = Math.sin(t * p.speed + p.phase) * 1.8;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + wave, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+    });
+  }
+
+  /* ----------------------------------------------------------------
+     GOAL
+  ---------------------------------------------------------------- */
+  function drawGoal() {
+    const gX = FIELD.goalX, gY = FIELD.goalY;
+    const gW = FIELD.goalW, gH = FIELD.goalH;
+    const pt = FIELD.postThick;
+
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(gX - 5, gY + 5, gW + 10, gH + 8);
+
+    // Net background
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(gX, gY, gW, gH);
+
+    // ---- Posts (metallic gradient) ----
+    function drawPost(x, y, w, h) {
+      const pg = ctx.createLinearGradient(x, 0, x + w, 0);
+      pg.addColorStop(0, '#9ca3af');
+      pg.addColorStop(0.3, '#ffffff');
+      pg.addColorStop(0.7, '#e5e7eb');
+      pg.addColorStop(1, '#6b7280');
+      ctx.fillStyle = pg;
+      ctx.fillRect(x, y, w, h);
+    }
+    // Left post
+    drawPost(gX - pt / 2, gY, pt, gH + pt / 2);
+    // Right post
+    drawPost(gX + gW - pt / 2, gY, pt, gH + pt / 2);
+    // Crossbar
+    const cbg = ctx.createLinearGradient(0, gY - pt / 2, 0, gY + pt / 2);
+    cbg.addColorStop(0, '#ffffff');
+    cbg.addColorStop(1, '#9ca3af');
+    ctx.fillStyle = cbg;
+    ctx.fillRect(gX - pt / 2, gY - pt / 2, gW + pt, pt);
+
+    // Post reflection lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1.5;
+    [[gX, gY, gX, gY + gH], [gX + gW, gY, gX + gW, gY + gH]].forEach(function(ln) {
+      ctx.beginPath();
+      ctx.moveTo(ln[0], ln[1]);
+      ctx.lineTo(ln[2], ln[3]);
+      ctx.stroke();
+    });
+  }
+
+  /* ----------------------------------------------------------------
+     NET
+  ---------------------------------------------------------------- */
+  function drawNet() {
+    const gX = FIELD.goalX, gY = FIELD.goalY;
+    const gW = FIELD.goalW, gH = FIELD.goalH;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 0.9;
+    // Horizontal lines
+    const hl = 9;
+    for (let i = 0; i <= hl; i++) {
+      const y = gY + (gH / hl) * i;
+      ctx.beginPath(); ctx.moveTo(gX, y); ctx.lineTo(gX + gW, y); ctx.stroke();
+    }
+    // Vertical lines
+    const vl = 16;
+    for (let i = 0; i <= vl; i++) {
+      const x = gX + (gW / vl) * i;
+      ctx.beginPath(); ctx.moveTo(x, gY); ctx.lineTo(x, gY + gH); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ----------------------------------------------------------------
+     PENALTY AREA LINES
+  ---------------------------------------------------------------- */
+  function drawPenaltyArea() {
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+
+    // Large box
+    const bW = 420, bH = 190, bX = (W - 420) / 2, bY = FIELD.goalY + FIELD.goalH;
+    ctx.strokeRect(bX, bY, bW, bH);
+
+    // Small box (6-yard)
+    const sW = 180, sH = 65, sX = (W - 180) / 2, sY = FIELD.goalY + FIELD.goalH;
+    ctx.strokeRect(sX, sY, sW, sH);
+
+    // Goal line
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(FIELD.goalX - 18, FIELD.goalY + FIELD.goalH);
+    ctx.lineTo(FIELD.goalX + FIELD.goalW + 18, FIELD.goalY + FIELD.goalH);
+    ctx.stroke();
+
+    // D arc
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(W / 2, FIELD.spotY, 60, Math.PI + 0.4, -0.4, false);
+    ctx.stroke();
+  }
+
+  /* ----------------------------------------------------------------
+     PENALTY SPOT
+  ---------------------------------------------------------------- */
+  function drawPenaltySpot() {
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath();
+    ctx.arc(FIELD.spotX, FIELD.spotY, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* ----------------------------------------------------------------
+     GOALKEEPER
+  ---------------------------------------------------------------- */
+  function drawGoalkeeper() {
+    const gkX = gk.x;
+    const gkY = gk.y;
+    const w   = gk.width;
+    const h   = gk.height;
+
+    ctx.save();
+    ctx.translate(gkX, gkY);
+
+    // Dive tilt
+    if (gk.diving && gk.diveProgress > 0) {
+      const toRight = gk.diveX > FIELD.gkRestX;
+      ctx.rotate((toRight ? 0.65 : -0.65) * easeOut(gk.diveProgress));
+    }
+
+    // Shadow on ground
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.52 + 6, w * 0.45, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Legs / shorts
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fillRect(-w / 2 + 6,  h * 0.54, w * 0.36, h * 0.46);
+    ctx.fillRect(w / 2 - 20,  h * 0.54, w * 0.36, h * 0.46);
+
+    // Boots
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(-w / 2 + 4,  h * 0.90, w * 0.38, h * 0.1);
+    ctx.fillRect(w / 2 - 22,  h * 0.90, w * 0.38, h * 0.1);
+
+    // Jersey
+    const jg = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+    jg.addColorStop(0, '#c0392b');
+    jg.addColorStop(0.5, '#e74c3c');
+    jg.addColorStop(1, '#c0392b');
+    ctx.fillStyle = jg;
+    roundRect(ctx, -w / 2, h * 0.2, w, h * 0.5, 8);
+    ctx.fill();
+
+    // Jersey number
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold ' + Math.round(w * 0.28) + 'px Outfit';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('1', 0, h * 0.47);
+
+    // Arms
+    const armAngle = gk.diving
+      ? (gk.diveX > FIELD.gkRestX ? 0.85 : -0.85) * easeOut(gk.diveProgress)
+      : 0;
+    ctx.save();
+    ctx.rotate(armAngle);
+    ctx.strokeStyle = '#e74c3c';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-w / 2, h * 0.3); ctx.lineTo(-w / 2 - 20, h * 0.52); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w / 2,  h * 0.3); ctx.lineTo(w / 2 + 20,  h * 0.52); ctx.stroke();
+    ctx.restore();
+
+    // Gloves
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath(); ctx.arc(-w / 2 - 20, h * 0.52, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w / 2 + 20,  h * 0.52, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#d97706';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(-w / 2 - 20, h * 0.52, 9, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(w / 2 + 20,  h * 0.52, 9, 0, Math.PI * 2); ctx.stroke();
+
+    // Head
+    const hg = ctx.createRadialGradient(-4, h * 0.08, 2, 0, h * 0.11, 19);
+    hg.addColorStop(0, '#fde68a');
+    hg.addColorStop(1, '#b45309');
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.arc(0, h * 0.11, 19, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Keeper cap
+    ctx.fillStyle = '#1e3a5f';
+    ctx.beginPath();
+    ctx.arc(0, h * 0.09, 19, Math.PI, 0);
+    ctx.fillRect(-19, h * 0.09 - 2, 38, 6);
+    ctx.fill();
+    // Cap brim
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(-22, h * 0.09 + 4, 44, 5);
+
+    // Eyes
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(-6.5, h * 0.12, 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6.5,  h * 0.12, 3.2, 0, Math.PI * 2); ctx.fill();
+    // Eye whites
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-6.5, h * 0.12, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6.5,  h * 0.12, 1.2, 0, Math.PI * 2); ctx.fill();
+
+    // Mouth / grimace
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, h * 0.155, 5.5, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  /* ----------------------------------------------------------------
+     BALL
+  ---------------------------------------------------------------- */
+  function drawBall() {
+    const s  = ball.scale;
+    const bx = ball.x;
+    const by = ball.y;
+    const r  = ball.r * s;
+
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(ball.rotation);
+    ctx.globalAlpha = ball.opacity;
+
+    // Ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, r + 3, r * 0.85, r * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball body gradient
+    const bg = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
+    bg.addColorStop(0, '#ffffff');
+    bg.addColorStop(0.55, '#e5e7eb');
+    bg.addColorStop(1, '#9ca3af');
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Black pentagon patches
+    ctx.fillStyle = '#1f2937';
+    drawPentagon(ctx, 0, 0, r * 0.33);
+    const pAngles = [0, (Math.PI * 2 / 5), (Math.PI * 4 / 5), (Math.PI * 6 / 5), (Math.PI * 8 / 5)];
+    pAngles.forEach(function(a) {
+      drawPentagon(ctx, Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, r * 0.27);
+    });
+
+    // Glint
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.arc(-r * 0.3, -r * 0.35, r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawPentagon(c, cx, cy, size) {
+    c.save();
+    c.translate(cx, cy);
+    c.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      if (i === 0) c.moveTo(Math.cos(a) * size, Math.sin(a) * size);
+      else         c.lineTo(Math.cos(a) * size, Math.sin(a) * size);
+    }
+    c.closePath();
+    c.fill();
+    c.restore();
+  }
+
+  /* ----------------------------------------------------------------
+     HUD (shots progress bar)
+  ---------------------------------------------------------------- */
+  function drawHUD() {
+    const barW = W - 40, barH = 7;
+    const barX = 20, barY = H - 22;
+
+    // Track
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    roundRect(ctx, barX, barY, barW, barH, 4);
+    ctx.fill();
+
+    // Progress
+    const ratio = state.shots / state.maxShots;
+    const fillW = barW * ratio;
+    if (fillW > 0) {
+      const fg = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
+      fg.addColorStop(0, '#4ade80');
+      fg.addColorStop(1, '#f59e0b');
+      ctx.fillStyle = fg;
+      roundRect(ctx, barX, barY, fillW, barH, 4);
+      ctx.fill();
+    }
+
+    // Label
+    const remaining = state.maxShots - state.shots;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '12px Outfit';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(remaining + ' shots remaining', W - 22, barY - 4);
+
+    // Difficulty indicator
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.textAlign = 'left';
+    ctx.fillText('DIFFICULTY: ' + state.difficulty.toUpperCase(), 22, barY - 4);
+  }
+
+  /* ================================================================
+     MATH HELPERS
+  ================================================================ */
+  function lerp(a, b, t)  { return a + (b - a) * t; }
+  function easeInOut(t)   { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+  function easeOut(t)     { return 1 - Math.pow(1 - t, 3); }
+  function bezier(p0, p1, p2, t) {
+    return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * p1 + t * t * p2;
+  }
+
+  /* ================================================================
+     UTILITY: rounded rect path
+  ================================================================ */
+  function roundRect(c, x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2;
+    if (h < 2 * r) r = h / 2;
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y,     x + w, y + h, r);
+    c.arcTo(x + w, y + h, x,     y + h, r);
+    c.arcTo(x,     y + h, x,     y,     r);
+    c.arcTo(x,     y,     x + w, y,     r);
+    c.closePath();
+  }
+
+  /* ================================================================
+     IDLE ANIMATION LOOP (crowd waving, etc.)
+  ================================================================ */
+  function idleLoop() {
+    if (!state.animating) drawScene();
+    if (confettiList.length > 0) updateConfetti();
+    requestAnimationFrame(idleLoop);
+  }
+  requestAnimationFrame(idleLoop);
+
+  /* ================================================================
+     INITIAL RENDER
+  ================================================================ */
+  drawScene();
+  updateScoreboard();
+  updateStatsUI();
+
+})(); // end IIFE
+</script>
+</body>
+</html>
